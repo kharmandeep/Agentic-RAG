@@ -1,0 +1,5 @@
+langchain==0.3.27
+langchain_community==0.3.29
+dotenv==0.9.9
+beautifulsoup4==4.13.5
+html2text==2025.4.15
