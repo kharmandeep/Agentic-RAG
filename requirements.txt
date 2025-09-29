@@ -3,3 +3,8 @@ langchain_community==0.3.29
 dotenv==0.9.9
 beautifulsoup4==4.13.5
 html2text==2025.4.15
+pypdf==6.1.0
+langchain-unstructured==0.1.6
+unstructured==0.18.15
+langchain-text-splitters==0.3.11
+weaviate-client==4.16.9
