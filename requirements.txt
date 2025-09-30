@@ -8,3 +8,7 @@ langchain-unstructured==0.1.6
 unstructured==0.18.15
 langchain-text-splitters==0.3.11
 weaviate-client==4.16.9
+langchain_huggingface==0.3.1
+langchain-weaviate==0.0.5
+langchain-groq==0.3.8
+sentence-transformers==5.1.1

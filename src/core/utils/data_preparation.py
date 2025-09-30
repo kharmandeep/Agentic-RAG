@@ -24,13 +24,18 @@ def map_chunk_to_schema(chunk: Dict) -> Dict:
     content = chunk.get('page_content', '')
     source = metadata.get('source', '')
     doc_type = metadata.get('type', 'unknown')
+
+    domain = 'unknown'
     
     # Smart domain extraction
     if source.startswith('http://') or source.startswith('https://'):
         domain = urlparse(source).netloc or 'unknown'
     elif doc_type == 'pdf':
-        # For PDFs, use filename without extension
-        domain = Path(source).stem if source else 'pdf_document'
+        # For PDFs, use actual file_name if available
+        file_name = metadata.get('file_name', '')
+        if file_name:
+            # Use the PDF filename without extension (e.g., "84327" from "84327.pdf")
+            domain = Path(file_name).stem
     else:
         domain = 'local_file'
     
