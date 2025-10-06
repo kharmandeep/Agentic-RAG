@@ -344,7 +344,7 @@ workflow.add_edge("handle_validation", END)
 agent = workflow.compile()
 
 # Run a test query
-query = "What are the electricity sector decarbonization scenarios and what is the Mid-case assumption?"
+query = "How do I reset my Wells Fargo online banking password?"
 '''
 1. What are the electricity sector decarbonization scenarios?
 2. What is the Mid-case assumption for renewable energy?

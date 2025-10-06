@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from typing import List, Dict
 from pathlib import Path
 
-def load_chunked_documents(filename='data/processed/chunked_documents.json') -> List[Dict]:
+def load_chunked_documents(filename='AgenticRag/data/processed/chunked_documents.json') -> List[Dict]:
     """Load chunked documents from JSON file."""
     try:
         with open(filename, 'r', encoding='utf-8') as f:
@@ -67,7 +67,7 @@ def validate_document(doc: Dict) -> bool:
     
     return True
 
-def prepare_documents_for_weaviate(filename='data/processed/chunked_documents.json'):
+def prepare_documents_for_weaviate(filename='AgenticRag/data/processed/chunked_documents.json'):
     """Transform all chunks for Weaviate ingestion."""
     chunks = load_chunked_documents(filename)
     

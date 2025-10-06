@@ -6,31 +6,27 @@ Building an Agentic RAG (Retrieval Augmented Generation) system using web-scrape
 ## Architecture
 
 ### 1. Data Collection
-Raw Documents(total:240(html 146 + pdf 94) )
-    ↓
-Chunked Documents (1756 chunks)
-    ↓
-Validated & Prepared (1756 docs)
-    ↓
-Weaviate Database (1756 docs)
+**Web Crawling**
+Scrapes Lucid Motors and Wells Fargo websites.
+- Crawls 3 starting URLs with depth 2-4
+- Extracts HTML content and PDFs
+- Filters invalid/error pages
+- Crawled 277 documents (204 HTML + 73 PDF pages)
+- Chunked into 554 searchable pieces
+- Indexed all 554 chunks in Weaviate
+- Ready for hybrid search (semantic + BM25)
 
-**Web Scraping**
-- Target sites: Lucid Motors (knowledge base, Air models), Wells Fargo (help center)
-- Tools: LangChain RecursiveUrlLoader, Html2TextTransformer
-- Output: HTML pages + PDFs
-- Total documents: ~240 documents (HTML + PDF combined)
-
-**PDF Processing**
-- Extracted PDF URLs from HTML content
-- Processed using LangChain PDF loaders (UnstructuredPDFLoader/PyPDFLoader)
-- Combined with HTML content for comprehensive coverage
+Time taken: ~95 seconds for ingestion
 
 ### 2. Document Processing
 **Chunking**
 - Tool: RecursiveCharacterTextSplitter
-- Chunk size: 1000 characters
-- Overlap: 200 characters
-- Output: 1,756 searchable chunks
+- Loads 277 documents
+- Splits into ~1000 word chunks with 200 word overlap
+- Preserves metadata (source, type, chunk_index)
+- Creates ~554 chunks
+
+Runtime: 1-2 minutes
 
 **Metadata Preserved**
 - source (URL)
@@ -39,7 +35,14 @@ Weaviate Database (1756 docs)
 - chunk_id, chunk_index
 - section_title
 
-### 3. Vector Store
+### 3. Prepare Weaviate
+- Maps chunks to Weaviate schema.
+- Validates all chunks
+- Maps fields to schema (content, source, domain, doc_type, etc.)
+- Extracts domain from URLs
+- Prepares 554 documents for ingestion
+
+Runtime: < 1 minute
 **Database**: Weaviate (local deployment)(Why Weaviate:Native hybrid search support (vector + BM25))
 
 **Schema**
@@ -61,6 +64,12 @@ Inverted Index (BM25):
 - bm25_b: 0.75
 - bm25_k1: 1.2
 - cleanup_interval: 60 seconds
+
+Ingest Documents
+- Loads 554 prepared documents
+- Batch inserts into Weaviate
+- Shows progress every 100 documents
+- Verifies final count
 
 ### 3.1 Embedding and Vectorization
 
@@ -241,21 +250,19 @@ Return Answer    Return Fallback
 ### 5. KNOWN ISSUES
 **Data Quality:**
 
-Many documents are navigation/headers, not content
-Works well only with NREL renewable energy queries
-Lucid Motors/Wells Fargo content too shallow
+Data quality improved.Enhanced website crawling implemented.
 
 **Validation Failures:**
 
-LLM hallucinates when documents lack detail
-"Not grounded" even with correct retrieval
+LLM hallucinates when documents lack detail-fixed(more data added)
+"Not grounded" even with correct retrieval- fixed (more data added)
 
 ### 6.  Future Enhancements
 
 - Agent: Add Orchestrator Agent
 - Response Format as per the requirements
 - Re-ranking: Add cross-encoder after retrieval
-- Better Data: Curate database with substantive content
+- Better Data: Curate database with substantive content- Fixed
 - Evaluation: Implement RAGAS for automated testing
 - API Deployment: FastAPI server for production use
 

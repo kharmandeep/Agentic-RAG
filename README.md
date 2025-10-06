@@ -1,6 +1,8 @@
 # Agentic RAG System
 
+
 Multi-agent RAG system with intelligent retrieval planning and hybrid search.
+**Repository**: [https://github.com/kharmandeep/Agentic-RAG](https://github.com/kharmandeep/Agentic-RAG)
 
 ## Overview
 
@@ -58,7 +60,7 @@ python src/core/utils/ingest_documents.py
 ### Usage
 - Run the agent
 ```bash
-python src/core/simple_agent.py
+python src/agents/rag_agent.py
 ```
 
 **Or modify the query in the file:**
