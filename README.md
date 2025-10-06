@@ -76,7 +76,7 @@ python src/agents/rag_agent.py
 ## System Architecture
 
 ### Flow Diagram
-```mermaid
+```
 User Query
     ↓
 [Orchestrator - Input Guardrails] # TODO
@@ -94,8 +94,10 @@ User Query
 [Orchestrator - Output Guardrails] # TODO       
     ↓
 Final Answer
+```
 
 ### Folder Structure
+```
 Agentic-RAG/
 ├── src/
 │   ├── agents/
@@ -120,3 +122,4 @@ Agentic-RAG/
 ├── compose.yml                        # Docker Compose for Weaviate
 ├── requirements.txt
 └── README.md                         # Project overview
+```
