@@ -73,13 +73,12 @@ python src/agents/rag_agent.py
 - Compare the 95% by 2050 and 100% by 2035 decarbonization scenarios
 - What electricity decarbonization pathways are being considered?
 
-## System Architecture
 
 ### Flow Diagram
-```mermaid
+```
 User Query
     ↓
-[Orchestrator - Input Guardrails] # TODO
+[Input Guardrails] ← PII Detection, Content Safety, Query Validation
     ↓   
 [Intent Router](classify: FAQ/troubleshooting/procedural)
     ↓
@@ -91,11 +90,13 @@ User Query
     ↓
 [Synthesizer](generate answer with citations) # TODO : citations
     ↓
-[Orchestrator - Output Guardrails] # TODO       
+[Output Guardrails] ← Citations, assets, follow-ups, PII check      
     ↓
 Final Answer
+```
 
 ### Folder Structure
+```
 Agentic-RAG/
 ├── src/
 │   ├── agents/
@@ -107,6 +108,7 @@ Agentic-RAG/
 │       ├── data_preparation.py         # Data preprocessing
 │       ├── ingest_documents.py         # Weaviate ingestion
 │       └── weaviate_schema.py          # Database schema
+│       └── guardrails.py               # Input/output guardrails utilities
 ├── scripts/
 │   └── crawl.py                        # Crawling script
 ├── data/
@@ -120,3 +122,4 @@ Agentic-RAG/
 ├── compose.yml                        # Docker Compose for Weaviate
 ├── requirements.txt
 └── README.md                         # Project overview
+```

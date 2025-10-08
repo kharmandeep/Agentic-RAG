@@ -33,6 +33,9 @@ with weaviate.connect_to_local() as client:
             
             # Optional metadata
             Property(name="section_title", data_type=DataType.TEXT),
+
+            Property(name="images", data_type=DataType.TEXT_ARRAY),  # Store image URLs/paths
+            Property(name="pdfs", data_type=DataType.TEXT_ARRAY),    # Store PDF URLs/paths
         ]
     )
     print(f"Collection {collection_name} created, Metadata: {res}")

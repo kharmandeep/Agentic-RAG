@@ -23,7 +23,7 @@ def ingest_documents():
         
         with collection.batch.rate_limit(requests_per_minute=600) as batch:
             for i, doc in enumerate(docs):
-                # Map to your schema
+                # Map to your schema - NOW WITH IMAGES AND PDFS
                 properties = {
                     'content': doc['content'],
                     'source': doc['source'],
@@ -31,7 +31,9 @@ def ingest_documents():
                     'doc_type': doc['doc_type'],
                     'chunk_id': doc['chunk_id'],
                     'chunk_index': doc['chunk_index'],
-                    'section_title': doc.get('section_title', '')
+                    'section_title': doc.get('section_title', ''),
+                    'images': doc.get('images', []),  # ADD THIS
+                    'pdfs': doc.get('pdfs', []),      # ADD THIS
                 }
                 
                 batch.add_object(properties=properties)
@@ -41,6 +43,12 @@ def ingest_documents():
         
         failed_objects = collection.batch.failed_objects
         failed_refs = collection.batch.failed_references
+        
+        # DEBUG: Check if any objects with PDFs failed
+        if failed_objects:
+            print(f"\n🔍 DEBUG: Checking failed objects for PDFs...")
+            for fail in failed_objects[:10]:
+                print(f"  Failed: {fail}")
         
         duration = (datetime.now() - start_time).total_seconds()
         

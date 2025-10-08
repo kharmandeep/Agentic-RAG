@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from urllib.parse import urlparse
 from typing import List, Dict
@@ -17,6 +18,16 @@ def load_chunked_documents(filename='AgenticRag/data/processed/chunked_documents
     except Exception as e:
         print(f"Error loading chunks: {e}")
         return []
+    
+def extract_assets(content: str) -> tuple:
+    """Extract image and PDF references from content."""
+    # Find images
+    images = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+\.(?:jpg|jpeg|png|gif|svg|webp)', content, re.IGNORECASE)
+    
+    # Find PDFs
+    pdfs = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+\.pdf', content, re.IGNORECASE)
+    
+    return list(set(images)), list(set(pdfs))
 
 def map_chunk_to_schema(chunk: Dict) -> Dict:
     """Map chunked document to Weaviate schema."""
@@ -39,6 +50,9 @@ def map_chunk_to_schema(chunk: Dict) -> Dict:
     else:
         domain = 'local_file'
     
+    # Extract assets
+    images, pdfs = extract_assets(content)
+    
     return {
         'content': content,
         'source': source,
@@ -49,6 +63,8 @@ def map_chunk_to_schema(chunk: Dict) -> Dict:
         'section_title': metadata.get('title', ''),
         'url': source if source.startswith('http') else '',
         'created_at': metadata.get('scraped_at', ''),
+        'images': images,
+        'pdfs': pdfs,
     }
 
 def validate_document(doc: Dict) -> bool:
@@ -77,6 +93,8 @@ def prepare_documents_for_weaviate(filename='AgenticRag/data/processed/chunked_d
     weaviate_docs = []
     valid_count = 0
     failed_count = 0  # Add counter
+    total_images = 0
+    total_pdfs = 0
     
     for chunk in chunks:
         try:
@@ -85,6 +103,8 @@ def prepare_documents_for_weaviate(filename='AgenticRag/data/processed/chunked_d
             if validate_document(weaviate_doc):
                 weaviate_docs.append(weaviate_doc)
                 valid_count += 1
+                total_images += len(weaviate_doc.get('images', []))
+                total_pdfs += len(weaviate_doc.get('pdfs', []))
             else:
                 failed_count += 1  # Count failures
             
@@ -95,6 +115,7 @@ def prepare_documents_for_weaviate(filename='AgenticRag/data/processed/chunked_d
     
     print(f"Prepared {valid_count} valid documents for Weaviate")
     print(f"Failed validation: {failed_count}")  # Show failures
+    print(f"Images: {total_images}, PDFs: {total_pdfs}")
     print(f"Total processed: {valid_count + failed_count}")  # Should equal 1756
     return weaviate_docs
 
@@ -120,6 +141,8 @@ def preview_documents(docs: List[Dict], count: int = 3):
         print(f"  Chunk ID: {doc['chunk_id']}")
         print(f"  Content length: {len(doc['content'])} chars")
         print(f"  Source: {doc['source'][:60]}...")
+        print(f"  Images: {len(doc.get('images', []))}")
+        print(f"  PDFs: {len(doc.get('pdfs', []))}")
         print(f"  Content preview: {doc['content'][:150]}...")
         print("-" * 60)
 
