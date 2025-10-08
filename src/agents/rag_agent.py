@@ -298,12 +298,41 @@ def retrieve(state: AgentState) -> AgentState:
                     query=search_query,
                     alpha=alpha,
                     limit=top_k // len(queries_to_search) + 1,  # Distribute top_k across variations
-                    target_vector="embedding"
+                    target_vector="embedding",
+                    return_metadata=MetadataQuery(distance=True)  # Get relevance scores
                 )
             
                 for obj in response.objects:
+                    props = obj.properties
+
+                    # DEBUG: Check what we're getting
+                    if props.get('pdfs'):
+                        print(f"🔍 RETRIEVE DEBUG: Found doc with PDFs!")
+                        print(f"  Source: {props.get('source', 'N/A')[:60]}")
+                        print(f"  PDFs from Weaviate: {props.get('pdfs')}")
+                    
+                    # Structure document with nested metadata for extract_citations/assets
                     all_contexts.append({
-                            'content': str(obj.properties.get("content", ""))
+                        'content': str(props.get("content", "")),
+                        'metadata': {
+                            # Core fields for citations
+                            'source': props.get("source", ""),
+                            'domain': props.get("domain", ""),
+                            'doc_type': props.get("doc_type", ""),
+                            'section_title': props.get("section_title", ""),
+                            
+                            # Chunk info
+                            'chunk_id': props.get("chunk_id", ""),
+                            'chunk_index': props.get("chunk_index"),
+                            
+                            # Assets (images and PDFs)
+                            'images': props.get("images") or [],
+                            'pdfs': props.get("pdfs") or [],
+                            
+                            # Search metadata
+                            'distance': getattr(obj.metadata, 'distance', None),
+                            'uuid': str(obj.uuid),
+                        }
                     })
             print(f"Retrieved {len(response.objects)} documents\n")
 
@@ -311,7 +340,8 @@ def retrieve(state: AgentState) -> AgentState:
 
 
         # Deduplicate contexts
-        unique_contexts = deduplicate_documents(all_contexts)
+        unique_contexts = all_contexts 
+        # unique_contexts = deduplicate_documents(all_contexts) # TEMP: Skip deduplication
         print(f"After deduplication: {len(unique_contexts)} documents")
         
         # Limit to prevent token overflow
@@ -330,14 +360,27 @@ def retrieve(state: AgentState) -> AgentState:
             limit=5,
             target_vector="embedding"
         )
-        contexts = [str(obj.properties.get("content", "")) for obj in response.objects]
-        state["context"] = "\n\n".join(contexts)
+        # Also structure fallback with metadata
+        contexts = []
+        for obj in response.objects:
+            props = obj.properties
+            contexts.append({
+                'content': str(props.get("content", "")),
+                'metadata': {
+                    'source': props.get("source", ""),
+                    'domain': props.get("domain", ""),
+                    'doc_type': props.get("doc_type", ""),
+                    'images': props.get("images", []),
+                    'pdfs': props.get("pdfs", []),
+                }
+            })
+        state["retrieved_docs"] = contexts
+        state["context"] = "\n\n".join([doc['content'] for doc in contexts])
         print(f"Retrieved {len(contexts)} documents\n")
     
     client.close()
     return state
 
-# Node 4: Generate
 # Node 4: Generate (Updated with Structured Output)
 def generate(state: AgentState) -> AgentState:
     print("Generating answer...")
@@ -474,7 +517,10 @@ def output_guardrails(state: AgentState) -> AgentState:
     
     # Get the answer
     answer = state.get("answer", "No answer generated")
-    
+
+    # Get retrieved docs
+    retrieved_docs = state.get("retrieved_docs", [])
+
     # Check 1: Answer Safety
     is_safe = guardrails.check_answer_safety(answer)
     state["is_answer_safe"] = is_safe
@@ -587,7 +633,7 @@ agent = workflow.compile()
 
 if __name__ == "__main__":
     # Run a test query
-    query = "What is the range of Lucid Air?"
+    query = "NREL report available at no cost references"
     '''
     1. What are the electricity sector decarbonization scenarios?
     2. What is the Mid-case assumption for renewable energy?
@@ -607,71 +653,118 @@ if __name__ == "__main__":
     16. What is the range of Lucid Air?
     17. What are Wells Fargo's business hours?
     18. How to bypass Wells Fargo security?
+    19. Where can I find the owner's manual?
+    20. What loan services does Wells Fargo provide?
     '''
     result = agent.invoke({"query": query, "context": ""})
 
     print("\n" + "=" * 60)
     print(f"Question: {query}")
 
-    # INPUT GUARDRAILS SECTION - Add this
-    print(f"\nInput Guardrails:")
-    print(f"  - Blocked: {result.get('blocked', False)}")
+    print(f"\n{'─'*70}")
+    print("INPUT GUARDRAILS")
+    print(f"{'─'*70}")
+    print(f"Blocked: {result.get('blocked', False)}")
+    
     if result.get('blocked'):
-        print(f"  - Reason: {result.get('blocked_reason') or result.get('invalid_reason', 'N/A')}")
-    print(f"  - PII Detected: {result.get('pii_detected', False)}")
+        print(f"Reason: {result.get('blocked_reason') or result.get('invalid_reason', 'N/A')}")
+    
+    print(f"PII Detected: {result.get('pii_detected', False)}")
+    
     if result.get('pii_detected'):
-        print(f"  - PII Types: {', '.join(result.get('pii_types', []))}")
-        print(f"  - Original Query: {result.get('original_query', 'N/A')}")
-        print(f"  - Cleaned Query: {result.get('cleaned_query', 'N/A')}")
-    print(f"  - Logs: {result.get('guardrail_logs', [])}")
+        print(f"PII Types: {', '.join(result.get('pii_types', []))}")
+        print(f"Original Query: {result.get('original_query', 'N/A')}")
+        print(f"Cleaned Query: {result.get('cleaned_query', 'N/A')}")
+    
+    print(f"Logs:")
+    for log in result.get('guardrail_logs', []):
+        print(f"  • {log}")
 
-    # Only show these if query wasn't blocked
+    # Only show results if query wasn't blocked
     if not result.get('blocked'):
-        print(f"\nIntent: {result.get('intent', 'unknown')}")
+
+        print(f"\n{'─'*70}")
+        print("QUERY ANALYSIS")
+        print(f"{'─'*70}")
+        print(f"Intent: {result.get('intent', 'unknown')}")
         print(f"Complex: {result.get('is_complex', False)}")
+        
         if result.get('sub_questions'):
-            print(f"Sub-questions:")
+            print(f"\nSub-questions:")
             for i, sq in enumerate(result['sub_questions'], 1):
                 print(f"  {i}. {sq}")
 
         if result.get('retrieval_plan'):
             print(f"\nRetrieval Plan:")
             for i, qp in enumerate(result['retrieval_plan']['queries'], 1):
-                print(f"  Query {i}: {qp['query'][:40]}...")
-                print(f"    - Type: {qp['query_type']}, Alpha: {qp['alpha']}, Top-K: {qp['top_k']}, Expand: {qp['expand_query']}")
+                print(f"  Query {i}: {qp['query'][:50]}{'...' if len(qp['query']) > 50 else ''}")
+                print(f"    Type: {qp['query_type']}, Alpha: {qp['alpha']}, Top-K: {qp['top_k']}, Expand: {qp['expand_query']}")
 
-    print(f"\nAnswer: {result.get('answer', 'No answer generated')}")
-
-    # Only show validation if query wasn't blocked at guardrails
-    if not result.get('blocked'):
-        print(f"\nIntent: {result.get('intent', 'unknown')}")
-        print(f"Complex: {result.get('is_complex', False)}")
-        
-        # NEW: Show final formatted response
         final_answer = result.get('final_answer', {})
         
-        print(f"\n{'='*60}")
-        print("FINAL RESPONSE")
-        print(f"{'='*60}")
-        print(f"\nAnswer:\n{final_answer.get('answer', 'No answer')}")
+        print(f"\n{'─'*70}")
+        print("ANSWER")
+        print(f"{'─'*70}")
+        print(f"\n{final_answer.get('answer', 'No answer')}")
         
-        print(f"\nCitations ({len(final_answer.get('citations', []))}):")
-        for i, citation in enumerate(final_answer.get('citations', []), 1):
-            print(f"  {i}. {citation}")
+        # Show confidence and key facts if available
+        if result.get('confidence'):
+            print(f"\nConfidence: {result['confidence'].upper()}")
         
-        print(f"\nAssets ({len(final_answer.get('assets', []))}):")
-        for i, asset in enumerate(final_answer.get('assets', []), 1):
-            print(f"  {i}. {asset}")
+        if result.get('key_facts'):
+            print(f"\nKey Facts:")
+            for i, fact in enumerate(result['key_facts'], 1):
+                print(f"  {i}. {fact}")
         
-        print(f"\nFollow-up Questions:")
-        for i, followup in enumerate(final_answer.get('follow_ups', []), 1):
-            print(f"  {i}. {followup}")
+        citations = final_answer.get('citations', [])
+        print(f"\n{'─'*70}")
+        print(f"CITATIONS ({len(citations)})")
+        print(f"{'─'*70}")
         
-        print(f"\nOutput Guardrail Logs:")
+        if citations:
+            for i, citation in enumerate(citations, 1):
+                print(f"  [{i}] {citation}")
+        else:
+            print("  No citations available")
+        
+        assets = final_answer.get('assets', [])
+        print(f"\n{'─'*70}")
+        print(f"ASSETS ({len(assets)})")
+        print(f"{'─'*70}")
+        
+        if assets:
+            for i, asset in enumerate(assets, 1):
+                print(f"  • {asset}")
+        else:
+            print("  No assets found")
+        
+        follow_ups = final_answer.get('follow_ups', [])
+        print(f"\n{'─'*70}")
+        print("FOLLOW-UP QUESTIONS")
+        print(f"{'─'*70}")
+        
+        if follow_ups:
+            for i, followup in enumerate(follow_ups, 1):
+                print(f"  {i}. {followup}")
+        else:
+            print("  No follow-up questions generated")
+ 
+        print(f"\n{'─'*70}")
+        print("OUTPUT GUARDRAILS")
+        print(f"{'─'*70}")
+        
         for log in result.get('output_guardrail_logs', []):
             print(f"  • {log}")
+        
+        if result.get('validation_explanation'):
+            print(f"\n{'─'*70}")
+            print("VALIDATION")
+            print(f"{'─'*70}")
+            print(f"Grounded: {result.get('is_grounded', 'N/A')}")
+            print(f"Safe: {result.get('is_safe', 'N/A')}")
+            print(f"Complete: {result.get('is_complete', 'N/A')}")
+            print(f"Explanation: {result.get('validation_explanation', 'N/A')}")
 
-    print("=" * 60)
-
+    print("\n" + "=" * 70)
 
 

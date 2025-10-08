@@ -148,19 +148,21 @@ def extract_assets(retrieved_docs: List[Dict]) -> List[str]:
     for doc in retrieved_docs:
         metadata = doc.get('metadata', {})
         
-        # Get images
-        images = metadata.get('images', [])
-        for img in images:
-            if img and img not in seen:
-                assets.append(img)
-                seen.add(img)
+        # Get images - handle None case
+        images = metadata.get('images') or []
+        if isinstance(images, list):  # Make sure it's a list
+            for img in images:
+                if img and isinstance(img, str) and img not in seen:  # Check it's a string
+                    assets.append(img)
+                    seen.add(img)
         
-        # Get PDFs
-        pdfs = metadata.get('pdfs', [])
-        for pdf in pdfs:
-            if pdf and pdf not in seen:
-                assets.append(pdf)
-                seen.add(pdf)
+        # Get PDFs - handle None case  
+        pdfs = metadata.get('pdfs') or []
+        if isinstance(pdfs, list):  # Make sure it's a list
+            for pdf in pdfs:
+                if pdf and isinstance(pdf, str) and pdf not in seen:  # Check it's a string
+                    assets.append(pdf)
+                    seen.add(pdf)
     
     return assets[:5]  # Limit to 5 assets
 

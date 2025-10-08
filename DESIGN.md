@@ -116,137 +116,155 @@ Ingest Documents
 - Remaining: 3,000 tokens for query + answer
 
 ### 4. Agent Implementation
-```mermaid
-┌──────────────────┐
-│   USER QUERY     │
-└───────┬──────────┘
-        │
-        ▼
-┌────────────────────┐
-│  INTENT ROUTER     │
-│                    │
-│ • LLM classification│
-│ • Output: faq/     │
-│   troubleshooting/ │
-│   procedural       │
-└────────┬───────────┘
-         │
-         ▼
-┌────────────────────┐
-│     PLANNER        │
-│                    │
-│ Complexity Check   │
-│ (rule-based)       │
-└────────┬───────────┘
-│
-┌────────┴────────┐
-│                 │
-Simple Query      Complex Query
-│                 │
-│                 ▼
-│         ┌──────────────┐
-│         │ Decompose    │
-│         │ (LLM)        │
-│         │ → 2-4 sub-Q  │
-│         └──────┬───────┘
-│                │
-└────────┬───────┘
-         │
-         ▼
-┌────────────────────┐
-│ RETRIEVAL PLAN     │
-│                    │
-│ For each query:    │
-│ 1. Classify type   │
-│    (rule-based)    │
-│                    │
-│ 2. Set alpha       │
-│    factual: 0.3    │
-│    conceptual: 0.8 │
-│                    │
-│ 3. Set top_k       │
-│    simple: 5       │
-│    complex: 7      │
-│                    │
-│ 4. Expand flag     │
-│    short/conceptual│
-└────────┬───────────┘
- 
-┌────────────────────┐
-│ HYBRID RETRIEVAL   │
-│                    │
-│ For each query:    │
-│ ┌────────────────┐ │
-│ │ Expand? Yes    │ │
-│ │ ↓              │ │
-│ │ Generate 2     │ │
-│ │ variations (LLM)│ │
-│ └────────────────┘ │
-│                    │
-│ Execute hybrid     │
-│ search with:       │
-│ • alpha from plan  │
-│ • top_k from plan  │
-│                    │
-│ Retrieved: ~14-28  │
-│ documents          │
-└───────┬───────────-┘
-        │
-        ▼
-┌────────────────────┐
-│  DEDUPLICATION     │
-│                    │
-│ Hash first 200     │
-│ chars of each doc  │
-│                    │
-└───────┬────────---─┘ 
-        │
-        ▼
-┌────────────────────┐
-│  LIMIT TO 10       │
-│                    │
-│ Prevent token      │
-│ overflow (8k limit)│
-└────────┬───────────┘
-         │
-         ▼
-┌────────────────────┐
-│   GENERATOR        │
-│                    │
-│ LLM generates      │
-│ answer from        │
-│ context + query    │
-└────────┬───────────┘
-         │
-         ▼
-┌────────────────────┐
-│   VALIDATOR        │
-│                    │
-│ LLM checks:        │
-│ • Grounded?        │
-│ • Safe?            │
-│ • Complete?        │
-└────────┬───────────┘
-         │
-┌────────┴────────┐
-│                 │
-Grounded = True   Grounded = False
-│                 │
-▼                 ▼
-Return Answer    Return Fallback
-"Not enough info"
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER QUERY                              │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                    INPUT GUARDRAILS                             │
+│  • PII Detection (SSN, Email, CC)                               │
+│  • Content Safety (Block harmful queries)                       │
+│  • Query Validation (Length, format)                            │
+│  • Audit Logging                                                │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+                    ┌────────┴────────┐
+                    │   Blocked?      │
+                    └────────┬────────┘
+                   Yes ↓     │ No
+                   END       ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                     INTENT ROUTER                               │
+│  • Classify: FAQ / Troubleshooting / Procedural                 │
+│  • Uses LLM with structured output                              │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                        PLANNER                                  │
+│  • Detect query complexity                                      │
+│  • Decompose into sub-questions if needed                       │
+│  • Create retrieval plan:                                       │
+│    - Query type (factual/conceptual/comparison)                 │
+│    - Alpha value (vector/keyword balance)                       │
+│    - Top-K documents                                            │
+│    - Query expansion (yes/no)                                   │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                       RETRIEVER                                 │
+│  • Hybrid Search (Vector + BM25)                                │
+│  • Query Expansion (if enabled)                                 │
+│  • Metadata Extraction:                                         │
+│    - source, domain, doc_type                                   │
+│    - images[], pdfs[]                                           │
+│    - distance, uuid                                             │
+│  • NO Deduplication (preserves metadata)                        │
+│  • Limit to 6 documents                                         │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                       GENERATOR                                 │
+│  • LLM generates structured answer                              │
+│  • Outputs:                                                     │
+│    - answer (text)                                              │
+│    - confidence (high/medium/low)                               │
+│    - is_grounded (bool)                                         │
+│    - key_facts (list)                                           │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                       VALIDATOR                                 │
+│  • Check if grounded in context                                 │
+│  • Check if safe and appropriate                                │
+│  • Check if complete                                            │
+│  • Provide explanation                                          │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                  HANDLE VALIDATION                              │
+│  • If not grounded → Provide fallback response                  │
+│  • Otherwise → Pass through                                     │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                   OUTPUT GUARDRAILS                             │
+│  • Safety check on answer                                       │
+│  • PII detection in output                                      │
+│  • Extract citations from source URLs                           │
+│  • Extract assets (images, PDFs)                                │
+│  • Generate 3 follow-up questions                               │
+│  • Format final response                                        │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                     FINAL RESPONSE                              │
+│  • Answer + Confidence                                          │
+│  • Citations (source URLs)                                      │
+│  • Assets (PDFs, images)                                        │
+│  • Follow-up questions (3)                                      │
+│  • Guardrail logs                                               │
+└─────────────────────────────────────────────────────────────────┘
+
 ```
 **Key Design Decisions in Flow:**
 
-1. **Intent Router**: LLM-based for flexibility
-2. **Planner Complexity**: Rule-based for speed
-3. **Query Decomposition**: LLM for accuracy
-4. **Type Classification**: Rule-based (no LLM call)
-5. **Alpha Assignment**: Hardcoded map based on type
-6. **Query Expansion**: LLM only when needed
-7. **Deduplication**: Hash-based for efficiency
-8. **Validation**: LLM-as-judge for nuanced checking
+1. **Input Guardrails**: Regex-based for speed and reliability
+2. **Intent Router**: LLM-based for flexibility
+3. **Planner Complexity**: Rule-based for speed
+4. **Query Decomposition**: LLM for accuracy
+5. **Type Classification**: Rule-based (no LLM call)
+6. **Alpha Assignment**: Hardcoded map based on type
+7. **Query Expansion**: LLM only when needed
+8. **Deduplication**: Disabled to preserve metadata (images, PDFs, citations)
+   - Trade-off: May retrieve similar chunks
+   - Benefit: Keeps all asset references
+9. **Validation**: LLM-as-judge for nuanced checking
+10. **Output Guardrails**: Mixed approach for efficiency
 
+Data Flow
+Document Ingestion Pipeline
+```
+Raw Documents (PDF, HTML, etc.)
+    ↓
+Chunking (chunked_documents.json)
+    ↓
+Asset Extraction (prepare_documents.py)
+    • Regex: Find PDF/image URLs in content
+    • Store in 'images' and 'pdfs' arrays
+    ↓
+Weaviate Schema Mapping
+    • Map to schema with TEXT_ARRAY fields
+    ↓
+Batch Ingestion (ingest_documents.py)
+    • Include images, pdfs in properties
+    ↓
+Weaviate Vector Database
+    • Full-text search enabled (BM25)
+    • Vector embeddings (text2vec-transformers)
+    • Metadata preserved
+```
+
+Query Pipeline
+```
+User Query
+    ↓
+Input Guardrails → [Blocked] → END
+    ↓ [Pass]
+Intent Classification
+    ↓
+Query Planning
+    ↓
+Hybrid Retrieval (with metadata)
+    ↓
+Answer Generation
+    ↓
+Validation
+    ↓
+Output Guardrails
+    ↓
+Final Response
+```
 ### 5. KNOWN ISSUES
 **Data Quality:**
 
@@ -260,7 +278,7 @@ LLM hallucinates when documents lack detail-fixed(more data added)
 ### 6.  Future Enhancements
 
 - Agent: Add Orchestrator Agent
-- Response Format as per the requirements
+- Response Format as per the requirements(Fixed)
 - Re-ranking: Add cross-encoder after retrieval
 - Better Data: Curate database with substantive content- Fixed
 - Evaluation: Implement RAGAS for automated testing
